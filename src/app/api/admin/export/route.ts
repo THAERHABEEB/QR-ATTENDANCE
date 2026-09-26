@@ -16,7 +16,7 @@ export async function GET() {
       }
     });
 
-    const data = students.map((s) => {
+    const data = students.map((s: any) => {
       const row: any = {
         'Student ID': s.id,
         'Name': s.name,
@@ -24,7 +24,7 @@ export async function GET() {
 
       // Fill in week 1 to 10
       for (let i = 1; i <= 10; i++) {
-        const att = s.attendances.find(a => a.week === i);
+        const att = s.attendances.find((a: any) => a.week === i);
         row[`Week ${i}`] = att ? 'Attended' : 'Absent';
       }
 
