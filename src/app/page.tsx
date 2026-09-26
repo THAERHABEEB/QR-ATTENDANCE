@@ -1,69 +1,141 @@
-import Image from "next/image";
+"use client";
+
+import { useState, useEffect } from "react";
+import { QRCodeSVG } from "qrcode.react";
 import styles from "./page.module.css";
 
-export default function Home() {
+export default function StudentPortal() {
+  const [studentId, setStudentId] = useState("");
+  const [location, setLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [locationError, setLocationError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [qrPayload, setQrPayload] = useState<string | null>(null);
+  const [error, setError] = useState("");
+  const [studentName, setStudentName] = useState("");
+
+  // Get User Location on Mount
+  useEffect(() => {
+    if ("geolocation" in navigator) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          setLocation({
+            lat: position.coords.latitude,
+            lng: position.coords.longitude,
+          });
+          setLocationError("");
+        },
+        (err) => {
+          console.error(err);
+          setLocationError("Location access is required for attendance.");
+        },
+        { enableHighAccuracy: true }
+      );
+    } else {
+      setLocationError("Geolocation is not supported by your browser.");
+    }
+  }, []);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    setQrPayload(null);
+
+    if (!location) {
+      setError("Waiting for location access...");
+      return;
+    }
+
+    if (!studentId.trim()) {
+      setError("Please enter your Student ID.");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      // We will create this API route shortly
+      const res = await fetch("/api/students/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ studentId, location }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "Verification failed");
+      }
+
+      setStudentName(data.name);
+      
+      // The payload will be scanned by the professor
+      // Contains ID, timestamp to prevent reuse, and server signature (mocked here)
+      const payload = JSON.stringify({
+        studentId: data.id,
+        timestamp: new Date().toISOString(),
+      });
+      setQrPayload(payload);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
-    <div className={styles.page}>
-      <main className={styles.main}>
-        <Image
-          className={styles.logo}
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className={styles.intro}>
-          <h1>
-            To get started, edit the{" "}
-            <code className={styles.code}>page.tsx</code> file.
-          </h1>
-          <p>
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              target="_blank"
-              rel="noopener noreferrer"
+    <main className={styles.main}>
+      <div className={styles.card}>
+        <h1 className={styles.title}>University Attendance</h1>
+        <p className={styles.subtitle}>Verify your ID and Location to generate your QR Code</p>
+
+        {locationError && (
+          <div className={styles.locationWarning}>
+            ⚠️ {locationError}
+          </div>
+        )}
+
+        {!qrPayload ? (
+          <form onSubmit={handleSubmit} className={styles.form}>
+            <div className={styles.inputGroup}>
+              <label htmlFor="studentId" className={styles.label}>Student ID</label>
+              <input
+                id="studentId"
+                type="text"
+                value={studentId}
+                onChange={(e) => setStudentId(e.target.value)}
+                placeholder="e.g. 123456"
+                className={styles.input}
+                autoComplete="off"
+              />
+            </div>
+            <button 
+              type="submit" 
+              className={styles.button}
+              disabled={loading || !!locationError || !location}
             >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              target="_blank"
-              rel="noopener noreferrer"
+              {loading ? "Verifying..." : "Generate QR Code"}
+            </button>
+            {error && <p className={styles.errorMsg}>{error}</p>}
+          </form>
+        ) : (
+          <div>
+            <h2 style={{ fontSize: "1.2rem", marginBottom: "1rem" }}>Welcome, {studentName}</h2>
+            <p className={styles.subtitle} style={{ marginBottom: "0.5rem" }}>
+              Show this QR code to the scanner.
+            </p>
+            <div className={styles.qrContainer}>
+              <QRCodeSVG value={qrPayload} size={200} level="H" />
+            </div>
+            <p className={styles.successMsg}>Attendance Ready!</p>
+            <button 
+              className={styles.button} 
+              style={{ marginTop: "2rem", width: "100%" }}
+              onClick={() => setQrPayload(null)}
             >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className={styles.ctas}>
-          <a
-            className={styles.primary}
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className={styles.logo}
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className={styles.secondary}
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
+              Back
+            </button>
+          </div>
+        )}
+      </div>
+    </main>
   );
 }
